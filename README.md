@@ -196,22 +196,6 @@ podman compose -p pqcbench run --rm -T --no-deps --entrypoint openssl nginx-pqc 
   currently only measures raw handshakes; if you need to measure
   keep-alive request throughput again, add an HTTP client mode alongside
   `runHandshake` and a matching payload under `html/`.
-- **Find the breaking point**: increase `-conns` in steps (e.g., 20 -> 50
-  -> 100 -> 200 -> 500) to stress-test nginx. Since this is a closed-loop
-  workload, workers pile up pressure as each handshake takes longer under
-  load. Watch for saturation signals: throughput plateaus or drops while
-  p95/p99 latency climbs sharply, or errors appear in the JSON output.
-  CPU is the expected bottleneck: since `worker_processes auto` matches
-  core count, a 2-core instance saturates near 200% avg CPU. When testing
-  high concurrency, also increase `-duration` to capture steady-state
-  thermal/throttle behavior. Example: sweep concurrency and save separate
-  result files:
-  ```sh
-  for conns in 20 50 100 200 500; do
-    ./bench/bench -addr localhost:8443 -pqc -conns $conns -duration 30s \
-      -scenario pqc-$conns -out results/pqc-$conns.json
-  done
-  ./scripts/summarize.sh results
   ```
 
 ## Notes
