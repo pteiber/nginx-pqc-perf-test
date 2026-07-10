@@ -70,10 +70,19 @@ nginx/classic/nginx.conf  Groups X25519, mounted into the official nginx image
 html/small.html           served payload used for readiness/manual checks
 certs/gen-certs.sh        generates the shared ECDSA P-256 cert (runs in the certs service)
 bench/main.go             the handshake benchmark tool
-scripts/run-benchmark.sh  orchestrates a full run
+bench/Dockerfile          builds the bench tool on golang:1.24-bookworm (see Notes)
+scripts/run-benchmark.sh  orchestrates a full local (container) run
 scripts/summarize.sh      renders results/*.json into a markdown table
 results/                  benchmark output (gitignored, except .gitkeep)
+aws/                      run the same benchmark on real EC2 hosts (see aws/README.md)
+aws/single/               one Rocky 9 box runs nginx + bench over localhost
+aws/fleet/                a bench client drives N nginx target hosts over the network
 ```
+
+The `bench/`, `certs/gen-certs.sh`, `html/small.html`, and
+`scripts/summarize.sh` building blocks are reused unmodified by the AWS
+deployments; only the container path uses `compose.yaml` and
+`scripts/run-benchmark.sh`.
 
 ## What's measured
 
@@ -121,6 +130,21 @@ Treat absolute numbers as specific to the host they were measured on
 (container runtime overhead, CPU, host load all matter); the point of
 this harness is the **relative** PQC-vs-classic comparison under
 identical conditions, not an absolute number to quote elsewhere.
+
+## Running on real hardware (AWS)
+
+The quickstart above runs everything in containers on your workstation.
+To run the identical benchmark on real EC2 instances natively (no
+containers), see [`aws/README.md`](aws/README.md). Two modes are provided:
+
+- **single-host**: one Rocky Linux 9 box runs both nginx targets and the
+  bench tool over `localhost`; measures PQC cost on one machine.
+- **fleet**: a dedicated bench client drives the benchmark over the network
+  against N nginx hosts (any instance type / architecture) and consolidates
+  every host into one comparison table.
+
+Both are provisioned with Terraform + Ansible and reuse the building blocks
+above. They launch billed EC2 instances, so `terraform destroy` when done.
 
 ## Manual verification
 
