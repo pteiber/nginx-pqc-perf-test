@@ -10,7 +10,7 @@
   become: true
 
   vars:
-    repo_root: "{{ playbook_dir }}/../.."
+    repo_root: "{{ playbook_dir }}/../../.."
     deploy_root: /opt/nginx-pqc-perf-test
     nginx_pqc_port: 8443
     nginx_classic_port: 9443
@@ -34,7 +34,7 @@
         that: item.stat.exists
         fail_msg: >-
           {{ item.item }} not found under repo_root ({{ repo_root }}).
-          Run this playbook from aws/ansible/ inside the
+          Run this playbook from aws/single/ansible/ inside the
           nginx-pqc-perf-test repo, or adjust the repo_root variable.
       loop: "{{ preflight_files.results }}"
       loop_control:

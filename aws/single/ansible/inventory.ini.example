@@ -1,4 +1,4 @@
 # Copy this file to inventory.ini and fill in the values from
-# `terraform output` (run inside aws/terraform/).
+# `terraform output` (run inside aws/single/terraform/).
 [all]
 benchmark ansible_host=REPLACE_WITH_terraform_output_public_ip ansible_user=rocky ansible_ssh_private_key_file=REPLACE_WITH_terraform_output_private_key_path

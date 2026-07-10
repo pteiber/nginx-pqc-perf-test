@@ -4,8 +4,8 @@
 # the instances come up it renders the Ansible inventory and (unless
 # run_ansible = false) runs the playbook automatically.
 #
-# The single-host mode lives separately under aws/terraform + aws/ansible
-# and is not touched by any of this. See ../README.md.
+# The single-host mode lives separately under aws/single/terraform +
+# aws/single/ansible and is not touched by any of this. See aws/README.md.
 
 locals {
   common_tags = {

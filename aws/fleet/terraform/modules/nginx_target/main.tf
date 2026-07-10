@@ -1,12 +1,12 @@
 # One Rocky Linux 9 nginx target. Mirrors the single-host mode's instance
-# (aws/terraform/main.tf) but leaner: it only runs nginx-pqc and
+# (aws/single/terraform/main.tf) but leaner: it only runs nginx-pqc and
 # nginx-classic; the bench tool lives on the separate client. Networking
 # (VPC/subnet/SG/key) is supplied by the root module so every target in
 # the fleet shares one subnet.
 #
 # Rocky Linux 9 is Marketplace-only (owner account 679593333241); the AWS
 # account must accept the "Rocky Linux 9" subscription once per account,
-# or apply fails with OptInRequired. See ../../README.md.
+# or apply fails with OptInRequired. See aws/README.md.
 locals {
   # Auto-derive arch from what AWS reports the instance type supports,
   # rather than guessing from the name; arm64 iff AWS lists it (covers

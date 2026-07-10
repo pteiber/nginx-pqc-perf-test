@@ -30,5 +30,5 @@ output "run_benchmark_hint" {
 
 output "marketplace_reminder" {
   description = "Reminder about the one-time manual prerequisite for the Rocky Linux 9 targets."
-  value       = "If apply failed with OptInRequired: accept the Rocky Linux 9 Marketplace subscription for this AWS account/region via the AWS Console first, then re-run apply. See ../README.md."
+  value       = "If apply failed with OptInRequired: accept the Rocky Linux 9 Marketplace subscription for this AWS account/region via the AWS Console first, then re-run apply. See aws/README.md."
 }

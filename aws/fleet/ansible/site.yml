@@ -9,10 +9,10 @@
 #      network.
 # Shared building blocks (bench/, certs/gen-certs.sh, html/small.html,
 # scripts/summarize.sh) are copied from the repo root, mirroring the
-# single-host playbook rather than duplicating them. See ../README.md.
+# single-host playbook rather than duplicating them. See aws/README.md.
 #
 # This is deliberately separate from the single-host mode's
-# aws/ansible/playbook.yml; the two do not share files.
+# aws/single/ansible/playbook.yml; the two do not share files.
 
 - name: Provision nginx target hosts (Rocky Linux 9)
   hosts: nginx_targets

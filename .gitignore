@@ -5,12 +5,12 @@ certs/*.crt
 *.log
 
 # Terraform (single-host mode)
-aws/terraform/.terraform/
-aws/terraform/generated/
-aws/terraform/*.tfstate
-aws/terraform/*.tfstate.*
-aws/terraform/*.tfvars
-aws/terraform/crash.log
+aws/single/terraform/.terraform/
+aws/single/terraform/generated/
+aws/single/terraform/*.tfstate
+aws/single/terraform/*.tfstate.*
+aws/single/terraform/*.tfvars
+aws/single/terraform/crash.log
 
 # Terraform (fleet mode)
 aws/fleet/terraform/.terraform/
@@ -21,5 +21,5 @@ aws/fleet/terraform/*.tfvars
 aws/fleet/terraform/crash.log
 
 # Ansible
-aws/ansible/inventory.ini
+aws/single/ansible/inventory.ini
 aws/fleet/ansible/inventory.ini

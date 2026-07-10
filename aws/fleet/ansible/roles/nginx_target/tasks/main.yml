@@ -1,7 +1,7 @@
 ---
 # Deploys nginx-pqc + nginx-classic onto a Rocky Linux 9 target as
 # independent systemd services, plus a bounded CPU/mem poller the bench
-# client invokes over SSH. Adapted from the single-host aws/ansible/
+# client invokes over SSH. Adapted from the single-host aws/single/ansible/
 # playbook.yml, minus everything bench-related (the bench tool lives on
 # the client in fleet mode).
 
