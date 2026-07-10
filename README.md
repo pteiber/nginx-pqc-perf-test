@@ -41,7 +41,7 @@ Podman-specific: `scripts/run-benchmark.sh` auto-detects Docker too.
 
 This starts both nginx targets (pulling `nginx:1.31.2` if needed, no
 image build), generates a shared cert, confirms each target negotiates
-the TLS group it's supposed to, runs the handshake benchmark against
+the TLS group it's supposed to, builds and runs the handshake benchmark against
 both, and tears everything down when it's done. Results land in
 `results/`:
 
