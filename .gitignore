@@ -3,3 +3,14 @@ results/*
 certs/*.key
 certs/*.crt
 *.log
+
+# Terraform
+aws/terraform/.terraform/
+aws/terraform/generated/
+aws/terraform/*.tfstate
+aws/terraform/*.tfstate.*
+aws/terraform/*.tfvars
+aws/terraform/crash.log
+
+# Ansible
+aws/ansible/inventory.ini
