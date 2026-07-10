@@ -1,0 +1,21 @@
+# Managed by Ansible ({{ ansible_managed }}) - do not edit directly.
+# Standard nginx.org systemd unit pattern, one per benchmark target so
+# nginx-pqc and nginx-classic run as independent, separately
+# start/stop-able services on the same host.
+[Unit]
+Description=nginx-classic (X25519) benchmark instance
+After=network.target remote-fs.target nss-lookup.target
+
+[Service]
+Type=forking
+PIDFile=/run/nginx-classic.pid
+ExecStartPre=/usr/sbin/nginx -c {{ deploy_root }}/nginx-classic/nginx.conf -t
+ExecStart=/usr/sbin/nginx -c {{ deploy_root }}/nginx-classic/nginx.conf
+ExecReload=/bin/kill -s HUP $MAINPID
+KillSignal=SIGQUIT
+TimeoutStopSec=5
+KillMode=process
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
