@@ -1,7 +1,7 @@
 variable "region" {
   description = "AWS region to deploy into. The Rocky Linux 9 Marketplace subscription and the generated key pair are both tied to this region."
   type        = string
-  default     = "us-east-1"
+  default     = "us-east-2"
 }
 
 variable "instance_type" {
@@ -50,4 +50,14 @@ variable "root_volume_size_gb" {
   description = "Root EBS volume size in GB."
   type        = number
   default     = 20
+}
+
+variable "owner" {
+  description = "Owner tag applied to all created resources."
+  type        = string
+}
+
+variable "email" {
+  description = "Contact email tag applied to all created resources."
+  type        = string
 }

@@ -10,7 +10,7 @@ data "aws_ami" "rocky9" {
 
   filter {
     name   = "name"
-    values = ["Rocky-9-EC2-Base-*"]
+    values = ["Rocky-9-EC2-LVM-*"]
   }
 
   filter {
@@ -29,15 +29,62 @@ data "aws_ami" "rocky9" {
   }
 }
 
-data "aws_vpc" "default" {
-  default = true
+data "aws_availability_zones" "available" {
+  state = "available"
 }
 
-data "aws_subnets" "default" {
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.default.id]
+resource "aws_vpc" "benchmark" {
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_hostnames = true
+
+  tags = {
+    Name  = "nginx-pqc-perf-test"
+    owner = var.owner
+    email = var.email
   }
+}
+
+resource "aws_subnet" "benchmark" {
+  vpc_id                  = aws_vpc.benchmark.id
+  cidr_block              = "10.0.1.0/24"
+  availability_zone       = data.aws_availability_zones.available.names[0]
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name  = "nginx-pqc-perf-test"
+    owner = var.owner
+    email = var.email
+  }
+}
+
+resource "aws_internet_gateway" "benchmark" {
+  vpc_id = aws_vpc.benchmark.id
+
+  tags = {
+    Name  = "nginx-pqc-perf-test"
+    owner = var.owner
+    email = var.email
+  }
+}
+
+resource "aws_route_table" "benchmark" {
+  vpc_id = aws_vpc.benchmark.id
+
+  route {
+    cidr_block      = "0.0.0.0/0"
+    gateway_id      = aws_internet_gateway.benchmark.id
+  }
+
+  tags = {
+    Name  = "nginx-pqc-perf-test"
+    owner = var.owner
+    email = var.email
+  }
+}
+
+resource "aws_route_table_association" "benchmark" {
+  subnet_id      = aws_subnet.benchmark.id
+  route_table_id = aws_route_table.benchmark.id
 }
 
 # Generated fresh per-apply so there's nothing to pre-provision. The
@@ -51,6 +98,12 @@ resource "tls_private_key" "ssh" {
 resource "aws_key_pair" "generated" {
   key_name   = "nginx-pqc-perf-test-${substr(md5(tls_private_key.ssh.public_key_openssh), 0, 8)}"
   public_key = tls_private_key.ssh.public_key_openssh
+
+  tags = {
+    Name  = "nginx-pqc-perf-test"
+    owner = var.owner
+    email = var.email
+  }
 }
 
 resource "local_sensitive_file" "private_key" {
@@ -62,7 +115,7 @@ resource "local_sensitive_file" "private_key" {
 resource "aws_security_group" "benchmark" {
   name_prefix = "nginx-pqc-perf-test-"
   description = "nginx-pqc-perf-test benchmark VM"
-  vpc_id      = data.aws_vpc.default.id
+  vpc_id      = aws_vpc.benchmark.id
 
   ingress {
     description = "SSH"
@@ -91,7 +144,9 @@ resource "aws_security_group" "benchmark" {
   }
 
   tags = {
-    Name = "nginx-pqc-perf-test"
+    Name  = "nginx-pqc-perf-test"
+    owner = var.owner
+    email = var.email
   }
 }
 
@@ -99,7 +154,7 @@ resource "aws_instance" "benchmark" {
   ami                    = data.aws_ami.rocky9.id
   instance_type          = var.instance_type
   key_name               = aws_key_pair.generated.key_name
-  subnet_id              = data.aws_subnets.default.ids[0]
+  subnet_id              = aws_subnet.benchmark.id
   vpc_security_group_ids = [aws_security_group.benchmark.id]
 
   root_block_device {
@@ -112,6 +167,8 @@ resource "aws_instance" "benchmark" {
   }
 
   tags = {
-    Name = "nginx-pqc-perf-test"
+    Name  = "nginx-pqc-perf-test"
+    owner = var.owner
+    email = var.email
   }
 }
