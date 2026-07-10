@@ -36,6 +36,21 @@ last_mem() { # last_mem <stats-log> -> "12.3MB" or "n/a"
   [ -s "$f" ] || echo "n/a"
 }
 
+# params_line prints a one-line summary of the run parameters (concurrent
+# connections + duration), read from whichever result JSON exists. The
+# bench tool records these identically for every scenario in a run, so one
+# line above the table covers them all.
+params_line() {
+  local f
+  f="$(ls "$DIR"/*-handshake.json 2>/dev/null | head -n1)"
+  [ -n "$f" ] || { echo "_Run parameters unavailable._"; return; }
+  local conns dur
+  conns="$(jq -r '.connections // "n/a"' "$f")"
+  dur="$(jq -r '.duration_s // "n/a"' "$f" \
+    | awk '{if ($1 ~ /^[0-9]+(\.[0-9]+)?$/) {if ($1==int($1)) printf "%ds",$1; else printf "%.1fs",$1} else print $1}')"
+  printf '_Run parameters: %s concurrent connections, %s duration (per scenario)._\n' "$conns" "$dur"
+}
+
 row_handshake() {
   local name=$1 label=$2
   local j="$DIR/$name.json" s="$DIR/$name-stats.log"
@@ -48,8 +63,10 @@ row_handshake() {
     "$(avg_cpu "$s")" "$(last_mem "$s")"
 }
 
+echo "# NGINX PQC vs ECDHE Handshake Benchmark Results"
+echo
+params_line
 cat <<'EOF'
-# NGINX PQC vs ECDHE Handshake Benchmark Results
 
 | Scenario | TLS Group | Handshakes/sec | p50 (ms) | p95 (ms) | p99 (ms) | Errors | Avg CPU | Mem (last sample) |
 |---|---|---|---|---|---|---|---|---|
