@@ -14,19 +14,23 @@ variable "instance_type" {
     would silently throttle the instance mid-run and skew the very
     numbers this benchmark exists to measure. If you do pick a T-series
     type anyway, expect handshake-rate numbers to degrade over long runs.
+    The CPU architecture (x86_64 vs arm64) is auto-derived from this value,
+    so a Graviton family - e.g. c9g.large (Graviton5), c8g.*, m7g.*, r8g.* -
+    automatically selects the matching arm64 Rocky Linux 9 AMI. No need to
+    also set ami_architecture unless you want to override the heuristic.
   EOT
   type        = string
   default     = "c6i.large"
 }
 
 variable "ami_architecture" {
-  description = "CPU architecture to match when looking up the Rocky Linux 9 AMI (\"x86_64\" or \"arm64\"). Must match the architecture implied by instance_type - e.g. set this to \"arm64\" if you switch instance_type to a Graviton family like m7g.large."
+  description = "Override for the CPU architecture used to look up the Rocky Linux 9 AMI (\"x86_64\" or \"arm64\"). Leave null (the default) to auto-derive it from the instance type's architecture as reported by AWS - a Graviton family like c9g.large resolves to arm64, everything else to x86_64. Rarely needed; if set, it must match the instance type's architecture or terraform plan fails."
   type        = string
-  default     = "x86_64"
+  default     = null
 
   validation {
-    condition     = contains(["x86_64", "arm64"], var.ami_architecture)
-    error_message = "ami_architecture must be either \"x86_64\" or \"arm64\"."
+    condition     = var.ami_architecture == null ? true : contains(["x86_64", "arm64"], var.ami_architecture)
+    error_message = "ami_architecture must be null, \"x86_64\", or \"arm64\"."
   }
 }
 

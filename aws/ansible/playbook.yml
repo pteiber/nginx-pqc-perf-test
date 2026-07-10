@@ -65,6 +65,26 @@
           - procps-ng  # pgrep/ps - not present on a minimal image, used by run-benchmark.sh's CPU/mem polling
         state: present
 
+    # bench/go.mod requires Go >= 1.24; an older toolchain compiles fine but
+    # silently produces zero usable curves for X25519MLKEM768, which only shows
+    # up much later as a failed TLS sanity check. Fail fast here instead.
+    - name: Confirm Go toolchain is >= 1.24
+      ansible.builtin.command: /usr/bin/go version
+      register: go_version
+      changed_when: false
+
+    - name: Assert Go >= 1.24
+      vars:
+        go_ver: "{{ go_version.stdout | regex_search('[0-9]+\\.[0-9]+') }}"
+      ansible.builtin.assert:
+        that:
+          - go_ver | length > 0
+          - go_ver is version('1.24', '>=')
+        fail_msg: >-
+          Go >= 1.24 is required for X25519MLKEM768, but found:
+          "{{ go_version.stdout }}". The 'golang' AppStream package on this
+          Rocky 9 host is too old.
+
     # --- directories, shared payload, certs --------------------------------
     - name: Create deployment directories
       ansible.builtin.file:

@@ -4,6 +4,25 @@
 # Marketplace subscription terms for "Rocky Linux 9" via the AWS Console
 # at least once before Terraform can launch instances from this AMI -
 # otherwise `apply` fails with an OptInRequired error. See ../README.md.
+locals {
+  # Auto-derive the CPU architecture from the instance type unless explicitly
+  # overridden. This reads AWS's own supported_architectures for the type
+  # (see data.aws_ec2_instance_type.selected) rather than guessing from the
+  # name, so every family - including Graviton ones the name can't reveal,
+  # like the old "a1" - resolves correctly. arm64 iff AWS reports it.
+  derived_architecture = contains(data.aws_ec2_instance_type.selected.supported_architectures, "arm64") ? "arm64" : "x86_64"
+  ami_architecture     = coalesce(var.ami_architecture, local.derived_architecture)
+
+  # AZs in this region that actually offer the chosen instance type, intersected
+  # with the region's available AZs. Newly launched families (e.g. Graviton5
+  # c9g) are offered in only a subset of AZs, so blindly taking names[0] can
+  # fail - pick a usable one deterministically instead.
+  usable_azs = sort(setintersection(
+    toset(data.aws_ec2_instance_type_offerings.by_az.locations),
+    toset(data.aws_availability_zones.available.names),
+  ))
+}
+
 data "aws_ami" "rocky9" {
   most_recent = true
   owners      = ["679593333241"]
@@ -15,7 +34,7 @@ data "aws_ami" "rocky9" {
 
   filter {
     name   = "architecture"
-    values = [var.ami_architecture]
+    values = [local.ami_architecture]
   }
 
   filter {
@@ -33,6 +52,24 @@ data "aws_availability_zones" "available" {
   state = "available"
 }
 
+# Authoritative architecture for the chosen instance type, straight from AWS -
+# no name-based guessing. supported_architectures is e.g. ["arm64"] for
+# Graviton, ["x86_64"] (or ["i386","x86_64"]) otherwise.
+data "aws_ec2_instance_type" "selected" {
+  instance_type = var.instance_type
+}
+
+# Which AZs in this region offer the chosen instance type. Used to place the
+# subnet in an AZ that can actually run it (see local.usable_azs).
+data "aws_ec2_instance_type_offerings" "by_az" {
+  filter {
+    name   = "instance-type"
+    values = [var.instance_type]
+  }
+
+  location_type = "availability-zone"
+}
+
 resource "aws_vpc" "benchmark" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_hostnames = true
@@ -47,13 +84,23 @@ resource "aws_vpc" "benchmark" {
 resource "aws_subnet" "benchmark" {
   vpc_id                  = aws_vpc.benchmark.id
   cidr_block              = "10.0.1.0/24"
-  availability_zone       = data.aws_availability_zones.available.names[0]
+  availability_zone       = local.usable_azs[0]
   map_public_ip_on_launch = true
 
   tags = {
     Name  = "nginx-pqc-perf-test"
     owner = var.owner
     email = var.email
+  }
+
+  # Fail at plan time with an actionable message rather than a cryptic
+  # "index out of range" on usable_azs[0] when the chosen instance type is
+  # offered in no AZ of this region (common for brand-new families like c9g).
+  lifecycle {
+    precondition {
+      condition     = length(local.usable_azs) > 0
+      error_message = "instance_type \"${var.instance_type}\" is not offered in any availability zone of region \"${var.region}\". Pick a different instance_type or region (e.g. c9g is in us-east-1, us-east-2, us-west-2, eu-central-1)."
+    }
   }
 }
 
@@ -164,6 +211,17 @@ resource "aws_instance" "benchmark" {
 
   metadata_options {
     http_tokens = "required" # enforce IMDSv2
+  }
+
+  # Catch an architecture mismatch at plan time instead of letting it surface
+  # as an InvalidParameterValue from RunInstances at apply time. Only trips
+  # when ami_architecture is overridden to something the instance type doesn't
+  # support; the auto-derived value comes from this same list, so it can't.
+  lifecycle {
+    precondition {
+      condition     = contains(data.aws_ec2_instance_type.selected.supported_architectures, local.ami_architecture)
+      error_message = "ami_architecture \"${local.ami_architecture}\" does not match instance_type \"${var.instance_type}\" (supports ${join(", ", data.aws_ec2_instance_type.selected.supported_architectures)}). Remove the ami_architecture override to auto-derive it, or set an instance_type of the matching architecture."
+    }
   }
 
   tags = {

@@ -43,6 +43,36 @@ default for a CPU-bound crypto benchmark) but is fully overridable, e.g.
 `-var="instance_type=m6i.xlarge"`. No size was assumed; pick whatever fits
 your testing.
 
+### Graviton / ARM (e.g. c9g)
+
+To run the benchmark on AWS Graviton, just point `instance_type` at a Graviton
+family — that's the only change needed:
+
+```sh
+terraform apply -var="instance_type=c9g.large" -var="allowed_ssh_cidr=YOUR_IP/32"
+```
+
+The CPU architecture is auto-derived from `instance_type`, so a Graviton family
+(c9g/c9gd — Graviton5, c8g, m7g, r8g, t4g, …) automatically selects the arm64
+Rocky Linux 9 AMI, and the subnet is placed in an AZ that actually offers the
+type (newly launched families like c9g aren't offered in every AZ). The rest —
+Ansible, nginx, Go, the bench tool — is architecture-agnostic and needs no
+changes; the bench binary is built from source on the instance, so it comes out
+native aarch64.
+
+Notes:
+- The one-time **Rocky Linux 9 Marketplace subscription** (see Prerequisites)
+  covers the arm64 AMI too — it's the same product, no separate opt-in.
+- **c9g region availability**: US East (Ohio `us-east-2`, the default region),
+  US East (N. Virginia `us-east-1`), US West (Oregon `us-west-2`), and Europe
+  (Frankfurt `eu-central-1`). If your `region`/`instance_type` combo isn't
+  offered, `terraform plan` fails fast with a message telling you so.
+- `ami_architecture` is only an escape hatch — normally you set just
+  `instance_type` and the architecture is read authoritatively from AWS. If you
+  do set `ami_architecture`, it must match the instance type's architecture, or
+  `terraform plan` fails with a clear mismatch message (rather than the instance
+  failing to launch at apply time).
+
 `terraform apply` generates a fresh SSH key pair (not a pre-existing one)
 and writes the private key to `terraform/generated/nginx-pqc-perf-test.pem`
 (gitignored). **Note:** because this uses `tls_private_key`, the private
@@ -91,7 +121,7 @@ scp -i <key> rocky@<ip>:/opt/nginx-pqc-perf-test/results/summary.md .
 ## Gotchas
 
 - **Key pairs and regions**: the generated key pair lives in whatever
-  `var.region` you deployed to (default `us-east-1`). If you point
+  `var.region` you deployed to (default `us-east-2`). If you point
   Ansible/SSH at the wrong region's IP with the wrong key you'll just get
   a connection failure, not a helpful error.
 - **Native results aren't directly comparable to the container-path
