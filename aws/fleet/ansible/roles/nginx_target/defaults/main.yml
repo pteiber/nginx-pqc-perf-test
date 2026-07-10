@@ -1,0 +1,6 @@
+---
+# Repo root, relative to this role's playbook (aws/fleet/ansible).
+repo_root: "{{ playbook_dir }}/../../.."
+deploy_root: /opt/nginx-pqc-perf-test
+nginx_pqc_port: 8443
+nginx_classic_port: 9443

@@ -1,0 +1,22 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+
+allowed_ssh_cidr = "203.0.113.4/32" # your workstation's public IP /32
+owner            = "you"
+email            = "you@example.com"
+
+# The fleet of nginx target hosts to benchmark, keyed by a short name.
+# Add a host by adding a map entry; architecture is auto-derived from the
+# instance type (Graviton -> arm64, otherwise x86_64).
+nginx_targets = {
+  c6i = { instance_type = "c6i.large" } # amd64, Intel Ice Lake
+  c7g = { instance_type = "c7g.large" } # Graviton3 (arm64)
+  c8g = { instance_type = "c8g.large" } # Graviton4 (arm64)
+}
+
+# The client generates every handshake; keep it comfortably larger than
+# the targets so it is never the bottleneck.
+# client_instance_type = "c6i.xlarge"
+
+# region                 = "us-east-2"
+# expose_benchmark_ports = false
+# run_ansible            = true

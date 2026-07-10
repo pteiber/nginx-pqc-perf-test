@@ -1,4 +1,12 @@
-# nginx-pqc-perf-test on AWS (Rocky Linux 9, no containers)
+# nginx-pqc-perf-test on AWS: single-host mode (Rocky Linux 9, no containers)
+
+> **Two AWS modes.** This document covers **single-host mode**: one Rocky
+> Linux 9 instance runs nginx-pqc, nginx-classic, *and* the bench tool,
+> benchmarking over `localhost`. If instead you want to benchmark a
+> **fleet** of hosts (a variety of instance types / architectures) from a
+> single dedicated bench client and consolidate the results into one
+> table, see [`fleet/README.md`](fleet/README.md). The two modes are
+> self-contained and do not share Terraform or Ansible code.
 
 A second deployment target for the same PQC-vs-ECDHE TLS 1.3 handshake
 benchmark described in the repo root [README](../README.md); this one

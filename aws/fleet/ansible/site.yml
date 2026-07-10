@@ -1,0 +1,27 @@
+---
+# Fleet-mode provisioning. Two plays against the Terraform-generated
+# inventory:
+#   1. nginx_targets - each Rocky Linux 9 host runs nginx-pqc + nginx-classic
+#      only (no bench tool). It also installs a bounded CPU/mem poller the
+#      client invokes over SSH during a run.
+#   2. bench_client  - the single amd64 Amazon Linux 2023 host that builds
+#      the bench tool and drives + consolidates every benchmark over the
+#      network.
+# Shared building blocks (bench/, certs/gen-certs.sh, html/small.html,
+# scripts/summarize.sh) are copied from the repo root, mirroring the
+# single-host playbook rather than duplicating them. See ../README.md.
+#
+# This is deliberately separate from the single-host mode's
+# aws/ansible/playbook.yml; the two do not share files.
+
+- name: Provision nginx target hosts (Rocky Linux 9)
+  hosts: nginx_targets
+  become: true
+  roles:
+    - nginx_target
+
+- name: Provision the bench client (Amazon Linux 2023, amd64)
+  hosts: bench_client
+  become: true
+  roles:
+    - bench_client

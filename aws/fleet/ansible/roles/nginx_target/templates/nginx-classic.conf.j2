@@ -1,0 +1,46 @@
+# Managed by Ansible ({{ ansible_managed }}) - do not edit directly.
+# Fleet-mode nginx-classic target. Mirrors nginx/classic/nginx.conf in the
+# repo root (container variant); the only semantic difference from
+# nginx-pqc.conf.j2 is the ssl_conf_command Groups line below. Listens on
+# {{ nginx_classic_port }} (both instances share one host), has an explicit
+# pid file (two instances would otherwise collide on nginx's compiled-in
+# default pid path), and uses absolute paths under {{ deploy_root }}. Binds
+# all interfaces so the bench client can reach it over the intra-VPC network.
+
+pid /run/nginx-classic.pid;
+worker_processes auto;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+    access_log off;
+    error_log /var/log/nginx/nginx-classic-error.log;
+
+    server {
+        listen {{ nginx_classic_port }} ssl;
+        server_name localhost;
+
+        ssl_certificate     {{ deploy_root }}/certs/server.crt;
+        ssl_certificate_key {{ deploy_root }}/certs/server.key;
+
+        # TLS 1.3 only, classical ECDHE key exchange only (no PQC group
+        # offered). This is the baseline this benchmark compares against
+        # nginx-pqc.conf.j2, which offers X25519MLKEM768 instead;
+        # everything else about these two configs is identical.
+        ssl_protocols TLSv1.3;
+        ssl_conf_command Groups X25519;
+
+        ssl_session_cache off;
+        ssl_session_tickets off;
+
+        root {{ deploy_root }}/html;
+
+        location = /small {
+            alias {{ deploy_root }}/html/small.html;
+        }
+    }
+}

@@ -1,0 +1,167 @@
+---
+# Provisions the single amd64 Amazon Linux 2023 bench client: Go (from the
+# official tarball), the bench binary built from the repo-root source, the
+# SSH key + target list it needs to reach the fleet, and the consolidation
+# scripts. It builds and drives everything; it does not run nginx.
+
+- name: Wait for the client to accept SSH
+  ansible.builtin.wait_for_connection:
+    timeout: 300
+
+# --- preflight ----------------------------------------------------------
+- name: Preflight - confirm the shared repo files exist
+  ansible.builtin.stat:
+    path: "{{ repo_root }}/{{ item }}"
+  loop:
+    - bench/main.go
+    - bench/go.mod
+    - scripts/summarize.sh
+  register: preflight_files
+  delegate_to: localhost
+  become: false
+
+- name: Preflight - fail fast if repo files are missing
+  ansible.builtin.assert:
+    that: item.stat.exists
+    fail_msg: >-
+      {{ item.item }} not found under repo_root ({{ repo_root }}).
+      Run this playbook from aws/fleet/ansible/ inside the
+      nginx-pqc-perf-test repo, or adjust the repo_root variable.
+  loop: "{{ preflight_files.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Preflight - confirm the generated SSH key exists on the controller
+  ansible.builtin.stat:
+    path: "{{ ssh_key_src }}"
+  register: key_stat
+  delegate_to: localhost
+  become: false
+
+- name: Preflight - fail fast if the SSH key is missing
+  ansible.builtin.assert:
+    that: key_stat.stat.exists
+    fail_msg: >-
+      SSH key not found at {{ ssh_key_src }}. Run `terraform apply` in
+      aws/fleet/terraform first (it generates the key), or set ssh_key_src.
+
+# --- packages -----------------------------------------------------------
+- name: Install jq (used by the summarizers)
+  ansible.builtin.dnf:
+    name:
+      - jq
+    state: present
+
+# --- Go from the official tarball --------------------------------------
+- name: Check installed Go version, if any
+  ansible.builtin.command: "{{ go_root }}/bin/go version"
+  register: go_installed
+  changed_when: false
+  failed_when: false
+
+- name: Download the Go tarball
+  ansible.builtin.get_url:
+    url: "{{ go_url }}"
+    dest: "/tmp/{{ go_tarball }}"
+    mode: "0644"
+  when: go_version not in go_installed.stdout
+
+- name: Remove any previous Go install (clean, version-correct extract)
+  ansible.builtin.file:
+    path: "{{ go_root }}"
+    state: absent
+  when: go_version not in go_installed.stdout
+
+- name: Extract Go to /usr/local
+  ansible.builtin.unarchive:
+    src: "/tmp/{{ go_tarball }}"
+    dest: /usr/local
+    remote_src: true
+  when: go_version not in go_installed.stdout
+
+- name: Symlink go into /usr/local/bin (on PATH for sudo and login shells)
+  ansible.builtin.file:
+    src: "{{ go_root }}/bin/go"
+    dest: /usr/local/bin/go
+    state: link
+
+- name: Confirm Go toolchain is >= 1.24
+  ansible.builtin.command: "{{ go_root }}/bin/go version"
+  register: go_check
+  changed_when: false
+
+- name: Assert Go >= 1.24
+  vars:
+    go_ver: "{{ go_check.stdout | regex_search('[0-9]+\\.[0-9]+') }}"
+  ansible.builtin.assert:
+    that:
+      - go_ver | length > 0
+      - go_ver is version('1.24', '>=')
+    fail_msg: >-
+      Go >= 1.24 is required for X25519MLKEM768, but found:
+      "{{ go_check.stdout }}".
+
+# --- directories --------------------------------------------------------
+# Owned by the login user so the operator can run the benchmark and write
+# results/ without sudo (the run script also reads ssh_key.pem, below).
+- name: Create deployment directories
+  ansible.builtin.file:
+    path: "{{ deploy_root }}/{{ item }}"
+    state: directory
+    owner: "{{ client_user }}"
+    group: "{{ client_user }}"
+    mode: "0755"
+  loop:
+    - bench/src
+    - results
+
+# --- bench tool ---------------------------------------------------------
+- name: Copy bench/ source from repo root
+  ansible.builtin.copy:
+    src: "{{ repo_root }}/bench/"
+    dest: "{{ deploy_root }}/bench/src/"
+    mode: "0644"
+
+- name: Build the bench binary
+  ansible.builtin.command: "{{ go_root }}/bin/go build -o {{ deploy_root }}/bench/bench ."
+  args:
+    chdir: "{{ deploy_root }}/bench/src"
+    creates: "{{ deploy_root }}/bench/bench"
+  environment:
+    CGO_ENABLED: "0"
+    HOME: /root
+    GOCACHE: /root/.cache/go-build
+
+# --- SSH key + target list ----------------------------------------------
+- name: Install the SSH key the client uses to reach the targets
+  ansible.builtin.copy:
+    src: "{{ ssh_key_src }}"
+    dest: "{{ deploy_root }}/ssh_key.pem"
+    owner: "{{ client_user }}"
+    group: "{{ client_user }}"
+    mode: "0600"
+
+- name: Template the target list (name, private IP, instance type, arch)
+  ansible.builtin.template:
+    src: targets.env.j2
+    dest: "{{ deploy_root }}/targets.env"
+    mode: "0644"
+
+# --- run + summarize scripts --------------------------------------------
+- name: Copy scripts/summarize.sh from repo root (reused unmodified)
+  ansible.builtin.copy:
+    src: "{{ repo_root }}/scripts/summarize.sh"
+    dest: "{{ deploy_root }}/summarize.sh"
+    mode: "0755"
+
+- name: Copy the fleet consolidating summarizer
+  ansible.builtin.copy:
+    src: summarize-fleet.sh
+    dest: "{{ deploy_root }}/summarize-fleet.sh"
+    mode: "0755"
+
+- name: Copy the fleet run script
+  ansible.builtin.copy:
+    src: run-fleet-benchmark.sh
+    dest: "{{ deploy_root }}/run-fleet-benchmark.sh"
+    mode: "0755"
