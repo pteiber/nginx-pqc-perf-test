@@ -100,7 +100,7 @@ terraform destroy -auto-approve \
   -var="allowed_ssh_cidr=YOUR_IP/32" -var="owner=you" -var="email=you@example.com"
 ```
 
-Tune the run by prefixing `run-benchmark.sh` with `BENCH_DURATION=60s BENCH_CONNS=50`.
+Tune concurrency/length with `BENCH_CONNS` (default 20) and `BENCH_DURATION` (default 30s). The script runs under `sudo`, which strips the environment, so pass the vars *through* sudo (a leading `BENCH_CONNS=50 sudo ...` is dropped): `sudo BENCH_DURATION=60s BENCH_CONNS=50 /opt/nginx-pqc-perf-test/run-benchmark.sh`.
 
 ### Fleet mode
 
@@ -124,4 +124,4 @@ $SSH_CMD '/opt/nginx-pqc-perf-test/run-fleet-benchmark.sh && cat /opt/nginx-pqc-
 terraform destroy -auto-approve
 ```
 
-`summary.md` has a PQC and a Classic row per target with handshakes/sec, latency percentiles, errors, and the target's CPU/Mem during the run. Tune with `BENCH_DURATION` / `BENCH_CONNS` env vars on the client, same as single-host. If `terraform apply` succeeds but the Ansible step fails (e.g. a target still booting), re-run `terraform apply` and it will re-trigger only the Ansible step.
+`summary.md` has a PQC and a Classic row per target with handshakes/sec, latency percentiles, errors, and the target's CPU/Mem during the run. Tune concurrency/length with `BENCH_CONNS` (default 20) and `BENCH_DURATION` (default 30s); no sudo here (the client script runs as `ec2-user`), so a plain prefix works: `BENCH_DURATION=60s BENCH_CONNS=50 /opt/nginx-pqc-perf-test/run-fleet-benchmark.sh`. If `terraform apply` succeeds but the Ansible step fails (e.g. a target still booting), re-run `terraform apply` and it will re-trigger only the Ansible step.

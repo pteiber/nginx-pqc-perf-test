@@ -135,6 +135,15 @@ sudo /opt/nginx-pqc-perf-test/run-benchmark.sh
 cat /opt/nginx-pqc-perf-test/results/summary.md
 ```
 
+Tune concurrency and run length with `BENCH_CONNS` (default 20) and
+`BENCH_DURATION` (default 30s). The script runs under `sudo`, which strips
+the caller's environment, so pass the vars *through* sudo (a plain
+`BENCH_CONNS=50 sudo ...` prefix would be dropped):
+
+```sh
+sudo BENCH_DURATION=60s BENCH_CONNS=50 /opt/nginx-pqc-perf-test/run-benchmark.sh
+```
+
 Or fetch results back instead of reading them over SSH:
 
 ```sh
@@ -242,7 +251,9 @@ terraform output client_ssh_command   # ssh -i ... ec2-user@<client-ip>
 cat /opt/nginx-pqc-perf-test/results/summary.md
 ```
 
-Tune the run with env vars (same knobs as the other paths):
+Tune concurrency and run length with `BENCH_CONNS` (default 20) and
+`BENCH_DURATION` (default 30s). No sudo here (the client script runs as
+`ec2-user`), so a plain prefix works:
 
 ```sh
 BENCH_DURATION=60s BENCH_CONNS=50 /opt/nginx-pqc-perf-test/run-fleet-benchmark.sh
