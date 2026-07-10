@@ -29,7 +29,7 @@ http {
 
         # TLS 1.3 only, classical ECDHE key exchange only (no PQC group
         # offered). This is the baseline this benchmark compares against
-        # nginx-pqc.conf.j2, which offers X25519MLKEM768 instead —
+        # nginx-pqc.conf.j2, which offers X25519MLKEM768 instead;
         # everything else about these two configs is identical.
         ssl_protocols TLSv1.3;
         ssl_conf_command Groups X25519;
