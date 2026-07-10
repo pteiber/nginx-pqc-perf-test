@@ -1,0 +1,5 @@
+results/*
+!results/.gitkeep
+certs/*.key
+certs/*.crt
+*.log
