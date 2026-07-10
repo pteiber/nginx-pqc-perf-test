@@ -27,7 +27,11 @@ TARGETS_FILE="$(pwd)/targets.env"
 REMOTE_DEPLOY=/opt/nginx-pqc-perf-test
 TARGET_USER=rocky
 
-SSH_OPTS=(-i "$KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+# -n redirects ssh's stdin from /dev/null. This is load-bearing: the poller
+# ssh is backgrounded inside the `while read ... done < targets.env` loop and
+# would otherwise inherit the loop's stdin and slurp the remaining target
+# lines, so only the first target would ever run.
+SSH_OPTS=(-n -i "$KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
   -o BatchMode=yes -o ConnectTimeout=10 -o LogLevel=ERROR)
 
 # bench takes a Go duration string; the remote poller takes an integer
