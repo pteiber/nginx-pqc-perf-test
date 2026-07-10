@@ -22,7 +22,11 @@ field() { # field <json-file> <jq-expr> -> value or "n/a"
 avg_cpu() { # avg_cpu <stats-log> -> "12.3%" or "n/a"
   local f="$1"
   [ -f "$f" ] || { echo "n/a"; return; }
-  awk -F',' '{gsub("%","",$1); if ($1+0==$1) {sum+=$1; n++}} END {if (n>0) printf "%.1f%%", sum/n; else print "n/a"}' "$f"
+  # Note: numeric check is a regex match, not "$1+0==$1" - gsub() clears
+  # awk's STRNUM flag on the field, and $1+0==$1 then falls back to a
+  # string comparison that spuriously fails for values like "3.0" (whose
+  # number->string round-trip is "3", not "3.0").
+  awk -F',' '{gsub("%","",$1); if ($1 ~ /^[0-9]+(\.[0-9]+)?$/) {sum+=$1; n++}} END {if (n>0) printf "%.1f%%", sum/n; else print "n/a"}' "$f"
 }
 
 last_mem() { # last_mem <stats-log> -> "12.3MB" or "n/a"
