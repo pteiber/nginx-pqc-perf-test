@@ -1,9 +1,12 @@
 # Rocky Linux 9 is only published to AWS Marketplace, not the free AMI
-# catalog. Owner account 679593333241 is the Marketplace account Rocky
-# Linux publishes under. IMPORTANT: your AWS account must accept the
-# Marketplace subscription terms for "Rocky Linux 9" via the AWS Console
-# at least once before Terraform can launch instances from this AMI -
-# otherwise `apply` fails with an OptInRequired error. See ../README.md.
+# catalog. Rocky publishes the two architectures under different accounts:
+# arm64 (aarch64) under 679593333241 and x86_64 under 792107900819, so
+# both are listed as owners and the architecture filter below picks the
+# right one (only one account has images per arch). IMPORTANT: your AWS
+# account must accept the Marketplace subscription terms for "Rocky Linux
+# 9" via the AWS Console at least once before Terraform can launch
+# instances from this AMI - otherwise `apply` fails with an OptInRequired
+# error. See ../README.md.
 locals {
   # Auto-derive the CPU architecture from the instance type unless explicitly
   # overridden. This reads AWS's own supported_architectures for the type
@@ -25,11 +28,16 @@ locals {
 
 data "aws_ami" "rocky9" {
   most_recent = true
-  owners      = ["679593333241"]
+  owners      = ["679593333241", "792107900819"] # Rocky 9: arm64, x86_64
 
+  # Match either the Base or the LVM image line: Rocky does not publish
+  # both variants for every architecture/release, so pinning one name
+  # (e.g. LVM only) makes the lookup return nothing for the arch that only
+  # has the other. Values in a filter are OR'd; most_recent then picks the
+  # newest across both.
   filter {
     name   = "name"
-    values = ["Rocky-9-EC2-LVM-*"]
+    values = ["Rocky-9-EC2-Base-*", "Rocky-9-EC2-LVM-*"]
   }
 
   filter {
@@ -118,8 +126,8 @@ resource "aws_route_table" "benchmark" {
   vpc_id = aws_vpc.benchmark.id
 
   route {
-    cidr_block      = "0.0.0.0/0"
-    gateway_id      = aws_internet_gateway.benchmark.id
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.benchmark.id
   }
 
   tags = {

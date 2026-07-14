@@ -1,0 +1,253 @@
+---
+# Deploys nginx-pqc + nginx-classic onto a Rocky Linux 9 target as
+# independent systemd services, with session resumption enabled and a
+# random-sized payload served, plus a bounded CPU/mem poller the client
+# invokes over SSH. Adapted from the fleet nginx_target role; the load
+# generator (trafficmix) lives on the client, not here.
+
+# --- wait for the instance to accept SSH (Terraform runs us right after
+# RunInstances returns; cloud-init may still be finishing) ---------------
+- name: Wait for the target to accept SSH
+  ansible.builtin.wait_for_connection:
+    timeout: 300
+
+# --- preflight ----------------------------------------------------------
+- name: Preflight - confirm the shared repo files exist
+  ansible.builtin.stat:
+    path: "{{ repo_root }}/{{ item }}"
+  loop:
+    - certs/gen-certs.sh
+    - html/small.html
+  register: preflight_files
+  delegate_to: localhost
+  become: false
+
+- name: Preflight - fail fast if repo files are missing
+  ansible.builtin.assert:
+    that: item.stat.exists
+    fail_msg: >-
+      {{ item.item }} not found under repo_root ({{ repo_root }}).
+      Run this playbook from aws/traffic-mix/ansible/ inside the
+      nginx-pqc-perf-test repo, or adjust the repo_root variable.
+  loop: "{{ preflight_files.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+# --- nginx.org repo -----------------------------------------------------
+- name: Import nginx.org signing key
+  ansible.builtin.rpm_key:
+    key: https://nginx.org/keys/nginx_signing.key
+    state: present
+
+- name: Add nginx.org yum repo (stable, RHEL9 packages - Rocky 9 is ABI-compatible)
+  ansible.builtin.yum_repository:
+    name: nginx-stable
+    description: nginx.org stable repo
+    baseurl: http://nginx.org/packages/rhel/9/$basearch/
+    gpgcheck: true
+    gpgkey: https://nginx.org/keys/nginx_signing.key
+    enabled: true
+
+- name: Install packages
+  ansible.builtin.dnf:
+    name:
+      - nginx                         # newer than Rocky's AppStream 1.20.1; has OpenSSL 3.5 X25519MLKEM768
+      - policycoreutils-python-utils  # semanage/restorecon, needed below
+      - procps-ng                     # pgrep/ps for the CPU/mem poller
+    state: present
+
+# --- directories, shared payload, certs ---------------------------------
+- name: Create deployment directories
+  ansible.builtin.file:
+    path: "{{ deploy_root }}/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - certs
+    - html
+    - nginx-pqc
+    - nginx-classic
+
+- name: Copy html/small.html from repo root
+  ansible.builtin.copy:
+    src: "{{ repo_root }}/html/small.html"
+    dest: "{{ deploy_root }}/html/small.html"
+    mode: "0644"
+
+# The client fetches random byte ranges of this single file, so nginx
+# returns 206 with exactly the requested number of bytes. Generated once
+# (idempotent via creates); regenerate by removing it or bumping
+# payload_bytes and deleting the file.
+- name: Generate html/payload.bin ({{ payload_bytes }} bytes) for random-sized Range responses
+  ansible.builtin.shell: "head -c {{ payload_bytes }} /dev/urandom > {{ deploy_root }}/html/payload.bin"
+  args:
+    creates: "{{ deploy_root }}/html/payload.bin"
+
+- name: Ensure payload.bin is world-readable
+  ansible.builtin.file:
+    path: "{{ deploy_root }}/html/payload.bin"
+    mode: "0644"
+
+- name: Copy certs/gen-certs.sh from repo root
+  ansible.builtin.copy:
+    src: "{{ repo_root }}/certs/gen-certs.sh"
+    dest: "{{ deploy_root }}/gen-certs.sh"
+    mode: "0755"
+
+- name: Generate the shared ECDSA P-256 cert (idempotent - gen-certs.sh skips if it already exists)
+  ansible.builtin.command: "{{ deploy_root }}/gen-certs.sh {{ deploy_root }}/certs"
+  args:
+    creates: "{{ deploy_root }}/certs/server.crt"
+
+# --- SELinux (Rocky 9 ships enforcing by default) -----------------------
+- name: SELinux - label html dir as httpd_sys_content_t
+  ansible.builtin.command: semanage fcontext -a -t httpd_sys_content_t "{{ deploy_root }}/html(/.*)?"
+  register: sec_html
+  changed_when: sec_html.rc == 0
+  failed_when: sec_html.rc != 0 and 'already defined' not in sec_html.stderr
+
+- name: SELinux - label nginx conf dirs as httpd_config_t
+  ansible.builtin.command: semanage fcontext -a -t httpd_config_t "{{ deploy_root }}/{{ item }}(/.*)?"
+  loop:
+    - nginx-pqc
+    - nginx-classic
+  register: sec_conf
+  changed_when: sec_conf.rc == 0
+  failed_when: sec_conf.rc != 0 and 'already defined' not in sec_conf.stderr
+
+- name: SELinux - label certs dir as cert_t
+  ansible.builtin.command: semanage fcontext -a -t cert_t "{{ deploy_root }}/certs(/.*)?"
+  register: sec_certs
+  changed_when: sec_certs.rc == 0
+  failed_when: sec_certs.rc != 0 and 'already defined' not in sec_certs.stderr
+
+- name: SELinux - allow http_port_t on the benchmark ports
+  ansible.builtin.command: "semanage port -a -t http_port_t -p tcp {{ item }}"
+  loop:
+    - "{{ nginx_pqc_port }}"
+    - "{{ nginx_classic_port }}"
+  register: sec_port
+  changed_when: sec_port.rc == 0
+  failed_when: sec_port.rc != 0 and 'already defined' not in sec_port.stderr
+
+- name: SELinux - apply the contexts above
+  ansible.builtin.command: "restorecon -Rv {{ deploy_root }}"
+  register: sec_restorecon
+  changed_when: sec_restorecon.stdout != ""
+
+# --- nginx configs and systemd units ------------------------------------
+- name: Template nginx-pqc.conf
+  ansible.builtin.template:
+    src: nginx-pqc.conf.j2
+    dest: "{{ deploy_root }}/nginx-pqc/nginx.conf"
+    mode: "0644"
+  notify: Restart nginx-pqc
+
+- name: Template nginx-classic.conf
+  ansible.builtin.template:
+    src: nginx-classic.conf.j2
+    dest: "{{ deploy_root }}/nginx-classic/nginx.conf"
+    mode: "0644"
+  notify: Restart nginx-classic
+
+- name: Template systemd units
+  ansible.builtin.template:
+    src: "{{ item }}.service.j2"
+    dest: "/etc/systemd/system/{{ item }}.service"
+    mode: "0644"
+  loop:
+    - nginx-pqc
+    - nginx-classic
+  notify: Reload systemd
+
+- name: Flush handlers so units/configs are in place before enabling
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start nginx-pqc and nginx-classic
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  loop:
+    - nginx-pqc
+    - nginx-classic
+
+# --- firewalld: the client reaches the targets over the network in fleet
+# mode, so (unlike single-host, where traffic was loopback) these rules
+# are load-bearing when firewalld is active. Plain firewall-cmd rather
+# than the ansible.posix.firewalld module, to avoid an extra collection. -
+- name: Check firewalld status
+  ansible.builtin.systemd:
+    name: firewalld
+  register: firewalld_status
+  failed_when: false
+
+- name: Allow SSH and benchmark ports through firewalld, if active
+  ansible.builtin.command: "firewall-cmd --permanent --add-port={{ item }}/tcp"
+  loop:
+    - "22"
+    - "{{ nginx_pqc_port }}"
+    - "{{ nginx_classic_port }}"
+  when: firewalld_status.status.ActiveState | default('inactive') == 'active'
+  register: fw_add_port
+  changed_when: "'ALREADY_ENABLED' not in fw_add_port.stderr"
+
+- name: Reload firewalld, if active
+  ansible.builtin.command: firewall-cmd --reload
+  when: firewalld_status.status.ActiveState | default('inactive') == 'active'
+  changed_when: true
+
+# --- CPU/mem poller the client invokes over SSH -------------------------
+- name: Install target-stats.sh (bounded per-instance CPU/mem poller)
+  ansible.builtin.copy:
+    src: target-stats.sh
+    dest: "{{ deploy_root }}/target-stats.sh"
+    mode: "0755"
+
+# --- sanity checks, mirrors run-benchmark-native.sh's own checks --------
+- name: Sanity check - nginx-pqc serves /small
+  ansible.builtin.uri:
+    url: "https://localhost:{{ nginx_pqc_port }}/small"
+    validate_certs: false
+    status_code: 200
+
+- name: Sanity check - nginx-classic serves /small
+  ansible.builtin.uri:
+    url: "https://localhost:{{ nginx_classic_port }}/small"
+    validate_certs: false
+    status_code: 200
+
+- name: Sanity check - nginx-pqc negotiates X25519MLKEM768
+  ansible.builtin.shell: >
+    echo | openssl s_client -connect localhost:{{ nginx_pqc_port }}
+    -groups X25519MLKEM768 -brief 2>&1
+    | grep -q "Negotiated TLS1.3 group: X25519MLKEM768"
+  changed_when: false
+
+- name: Sanity check - nginx-classic rejects an X25519MLKEM768-only offer
+  ansible.builtin.shell: >
+    echo | openssl s_client -connect localhost:{{ nginx_classic_port }}
+    -groups X25519MLKEM768 2>&1
+    | grep -q "handshake failure"
+  changed_when: false
+
+# The traffic-mix workload depends on ranged payload serving; a 206 with
+# the requested byte count confirms it before the client ever runs.
+- name: Sanity check - both instances serve a ranged /payload.bin (206)
+  ansible.builtin.uri:
+    url: "https://localhost:{{ item }}/payload.bin"
+    validate_certs: false
+    headers:
+      Range: "bytes=0-1023"
+    status_code: 206
+    return_content: false
+  register: payload_check
+  failed_when: >-
+    payload_check.status != 206 or
+    (payload_check.content_length | default(0) | int) != 1024
+  loop:
+    - "{{ nginx_pqc_port }}"
+    - "{{ nginx_classic_port }}"

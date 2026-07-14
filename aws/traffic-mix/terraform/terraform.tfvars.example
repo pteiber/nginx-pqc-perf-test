@@ -1,0 +1,32 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+
+allowed_ssh_cidr = "203.0.113.4/32" # your workstation's public IP /32
+owner            = "you"
+email            = "you@example.com"
+
+# The fleet of nginx target hosts to benchmark, keyed by a short name.
+# Add a host by adding a map entry; architecture is auto-derived from the
+# instance type (Graviton -> arm64, otherwise x86_64).
+nginx_targets = {
+  c7g = { instance_type = "c7g.4xlarge" } # Graviton3  (arm64)
+  c6g = { instance_type = "c6g.4xlarge" } # Graviton2  (arm64)
+  c7i = { instance_type = "c7i.4xlarge" } # Intel Sapphire Rapids
+  c6i = { instance_type = "c6i.4xlarge" } # Intel Ice Lake
+  c5  = { instance_type = "c5.4xlarge" }  # Intel Cascade/Skylake
+  c7a = { instance_type = "c7a.4xlarge" } # AMD EPYC Genoa
+  c6a = { instance_type = "c6a.4xlarge" } # AMD EPYC Milan
+}
+# The client generates every request and handshake; keep it comfortably
+# larger than the targets so it is never the bottleneck.
+client_instance_type = "c6i.8xlarge"
+
+# region                 = "us-east-2"
+# expose_benchmark_ports = false
+# run_ansible            = true
+
+# The traffic-mix workload knobs (request rate, TLS handshake rate,
+# session-resumption percentage, response size range, duration) are NOT
+# set here. They are runtime env vars passed to run-traffic-mix-benchmark.sh
+# on the client (BENCH_RPS, BENCH_HANDSHAKE_RATE, BENCH_RESUME_PCT,
+# BENCH_MIN_BYTES, BENCH_MAX_BYTES, BENCH_DURATION, BENCH_CONNS). See
+# aws/traffic-mix/README.md.

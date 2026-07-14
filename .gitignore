@@ -20,6 +20,18 @@ aws/fleet/terraform/*.tfstate.*
 aws/fleet/terraform/*.tfvars
 aws/fleet/terraform/crash.log
 
+# Terraform (traffic-mix mode)
+aws/traffic-mix/terraform/.terraform/
+aws/traffic-mix/terraform/generated/
+aws/traffic-mix/terraform/*.tfstate
+aws/traffic-mix/terraform/*.tfstate.*
+aws/traffic-mix/terraform/*.tfvars
+aws/traffic-mix/terraform/crash.log
+
+# trafficmix build artifact
+trafficmix/nginx-pqc-trafficmix
+
 # Ansible
 aws/single/ansible/inventory.ini
 aws/fleet/ansible/inventory.ini
+aws/traffic-mix/ansible/inventory.ini

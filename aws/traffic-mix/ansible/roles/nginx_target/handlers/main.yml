@@ -1,0 +1,14 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Restart nginx-pqc
+  ansible.builtin.systemd:
+    name: nginx-pqc
+    state: restarted
+
+- name: Restart nginx-classic
+  ansible.builtin.systemd:
+    name: nginx-classic
+    state: restarted

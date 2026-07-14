@@ -1,0 +1,13 @@
+---
+# Repo root, relative to this role's playbook (aws/traffic-mix/ansible).
+repo_root: "{{ playbook_dir }}/../../.."
+deploy_root: /opt/nginx-pqc-perf-test
+nginx_pqc_port: 8443
+nginx_classic_port: 9443
+
+# Size of html/payload.bin, the single static file the client fetches
+# random byte ranges from. It must be >= the largest BENCH_MAX_BYTES you
+# intend to run (the client refuses a -max-bytes larger than the served
+# file). 4 MiB comfortably covers realistic web-object sizes; override
+# with -e payload_bytes=... to test larger objects.
+payload_bytes: 4194304

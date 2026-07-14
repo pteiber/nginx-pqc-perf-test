@@ -1,0 +1,23 @@
+---
+repo_root: "{{ playbook_dir }}/../../.."
+deploy_root: /opt/nginx-pqc-perf-test
+# Amazon Linux 2023 login user; owns the client deploy dir so the
+# benchmark can be run (and results written, key read) without sudo.
+client_user: ec2-user
+
+# Go is installed from the official tarball rather than Amazon Linux
+# 2023's dnf 'golang', to guarantee the >= 1.24 that tls.X25519MLKEM768
+# requires (an older toolchain compiles trafficmix/ fine but silently
+# produces zero usable curves, failing only later at TLS negotiation
+# time). Any
+# 1.24+ release works; override with -e go_version=X.Y.Z if this patch is
+# ever pulled.
+go_version: "1.24.5"
+go_tarball: "go{{ go_version }}.linux-amd64.tar.gz"
+go_url: "https://go.dev/dl/{{ go_tarball }}"
+go_root: /usr/local/go
+
+# Private key Terraform generated; copied onto the client so it can SSH
+# the targets to run the CPU/mem poller. Overridable if you relocate the
+# terraform working dir.
+ssh_key_src: "{{ playbook_dir }}/../terraform/generated/nginx-pqc-perf-test-traffic-mix.pem"

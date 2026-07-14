@@ -74,15 +74,18 @@ bench/Dockerfile          builds the bench tool on golang:1.24-bookworm (see Not
 scripts/run-benchmark.sh  orchestrates a full local (container) run
 scripts/summarize.sh      renders results/*.json into a markdown table
 results/                  benchmark output (gitignored, except .gitkeep)
-aws/                      run the same benchmark on real EC2 hosts (see aws/README.md)
+trafficmix/main.go        the mixed-traffic load generator (AWS traffic-mix mode)
+aws/                      run on real EC2 hosts (see aws/README.md)
 aws/single/               one Rocky 9 box runs nginx + bench over localhost
 aws/fleet/                a bench client drives N nginx target hosts over the network
+aws/traffic-mix/          like fleet, but a realistic mixed workload (see below)
 ```
 
 The `bench/`, `certs/gen-certs.sh`, `html/small.html`, and
 `scripts/summarize.sh` building blocks are reused unmodified by the AWS
 deployments; only the container path uses `compose.yaml` and
-`scripts/run-benchmark.sh`.
+`scripts/run-benchmark.sh`. The `aws/traffic-mix/` mode instead builds the
+separate `trafficmix/` load generator.
 
 ## What's measured
 
@@ -134,17 +137,23 @@ identical conditions, not an absolute number to quote elsewhere.
 ## Running on real hardware (AWS)
 
 The quickstart above runs everything in containers on your workstation.
-To run the identical benchmark on real EC2 instances natively (no
-containers), see [`aws/README.md`](aws/README.md). Two modes are provided:
+To run on real EC2 instances natively (no containers), see
+[`aws/README.md`](aws/README.md). Three modes are provided:
 
 - **single-host**: one Rocky Linux 9 box runs both nginx targets and the
   bench tool over `localhost`; measures PQC cost on one machine.
-- **fleet**: a dedicated bench client drives the benchmark over the network
-  against N nginx hosts (any instance type / architecture) and consolidates
-  every host into one comparison table.
+- **fleet**: a dedicated bench client drives the handshake benchmark over
+  the network against N nginx hosts (any instance type / architecture) and
+  consolidates every host into one comparison table.
+- **traffic-mix**: fleet-shaped, but the client drives a realistic mixed
+  workload (chosen HTTP request rate, TLS handshake rate, session-resumption
+  percentage, and random response-size range) instead of raw handshakes.
+  Shows PQC cost under production-like traffic, where session resumption
+  skips the post-quantum KEM on most connections.
 
-Both are provisioned with Terraform + Ansible and reuse the building blocks
-above. They launch billed EC2 instances, so `terraform destroy` when done.
+All are provisioned with Terraform + Ansible and reuse the building blocks
+above (traffic-mix builds the separate `trafficmix/` tool). They launch
+billed EC2 instances, so `terraform destroy` when done.
 
 ## Manual verification
 

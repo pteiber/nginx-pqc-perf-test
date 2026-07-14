@@ -1,18 +1,25 @@
 # nginx-pqc-perf-test on AWS
 
-Run the PQC-vs-ECDHE TLS 1.3 handshake benchmark (see the repo root
+Run the PQC-vs-ECDHE TLS 1.3 comparison (see the repo root
 [README](../README.md)) on real EC2 hosts, natively on the OS (no
-containers). Two independent modes:
+containers). Three independent modes:
 
 - **[Single-host](#single-host-mode)** (`single/`): one Rocky Linux 9 box
   runs both nginx targets and the bench tool, benchmarking over
   `localhost`. Simplest way to measure PQC cost on one machine.
 - **[Fleet](#fleet-mode)** (`fleet/`): a dedicated bench client drives the
-  benchmark over the network against N nginx hosts (any instance type or
-  architecture) and consolidates every host into one comparison table.
+  handshake benchmark over the network against N nginx hosts (any instance
+  type or architecture) and consolidates every host into one comparison
+  table.
+- **[Traffic-mix](#traffic-mix-mode)** (`traffic-mix/`): fleet-shaped, but
+  the client drives a realistic *mixed* workload instead of raw
+  handshakes: a chosen HTTP request rate, TLS handshake rate, TLS
+  session-resumption percentage, and random response-size range. Shows PQC
+  cost under production-like traffic, where session resumption avoids the
+  post-quantum KEM on most connections.
 
-Both cost real money (they launch EC2 instances). `terraform destroy` when
-you are done.
+Each mode is self-contained (they share no Terraform or Ansible). All cost
+real money (they launch EC2 instances). `terraform destroy` when done.
 
 ## Prerequisites
 
@@ -129,5 +136,73 @@ BENCH_DURATION=60s BENCH_CONNS=50 /opt/nginx-pqc-perf-test/run-fleet-benchmark.s
 
 ```sh
 cd fleet/terraform
+terraform destroy
+```
+
+---
+
+## Traffic-mix mode
+
+Same topology as fleet (one client, N nginx targets, Ansible auto-runs on
+`terraform apply`), but the client drives a realistic mixed workload
+rather than back-to-back handshakes. The nginx targets here have TLS
+session resumption **enabled** and serve a large `payload.bin` that the
+client fetches random byte ranges of; the fleet targets do neither.
+
+### Provision (auto-runs Ansible)
+
+```sh
+cd traffic-mix/terraform
+cp terraform.tfvars.example terraform.tfvars
+# edit: allowed_ssh_cidr, owner, email, and the nginx_targets map
+terraform init
+terraform apply
+```
+
+`nginx_targets` works exactly as in fleet mode. The workload knobs are
+*not* set here; they are runtime env vars on the client (below). The
+served payload size defaults to 4 MiB; override at provision time with
+`-e payload_bytes=<bytes>` on the Ansible run if you need larger responses.
+
+### Run the benchmark
+
+```sh
+SSH_CMD="$(terraform output -raw client_ssh_command)"
+$SSH_CMD '/opt/nginx-pqc-perf-test/run-traffic-mix-benchmark.sh && cat /opt/nginx-pqc-perf-test/results/summary.md'
+# ($SSH_CMD is intentionally unquoted so it splits into the ssh command and its args.)
+```
+
+The four workload knobs (plus pool sizes and duration) are env vars; no
+sudo (the client script runs as `ec2-user`), so a plain prefix works:
+
+| Env var                 | Default | Meaning                                            |
+|-------------------------|---------|----------------------------------------------------|
+| `BENCH_RPS`             | 200     | HTTP request rate over the warm keep-alive pool    |
+| `BENCH_HANDSHAKE_RATE`  | 50      | new TLS connections (handshakes) per second        |
+| `BENCH_RESUME_PCT`      | 50      | percent of those handshakes that resume a session  |
+| `BENCH_MIN_BYTES`       | 1024    | minimum response body size                         |
+| `BENCH_MAX_BYTES`       | 65536   | maximum response body size (<= served payload)     |
+| `BENCH_CONNS`           | 50      | warm keep-alive pool size                          |
+| `BENCH_HANDSHAKE_CONNS` | 50      | handshake-churn worker pool size                   |
+| `BENCH_DURATION`        | 30s     | run length per host+scenario                       |
+
+```sh
+BENCH_RPS=1000 BENCH_HANDSHAKE_RATE=200 BENCH_RESUME_PCT=80 \
+BENCH_MIN_BYTES=4096 BENCH_MAX_BYTES=262144 BENCH_DURATION=60s \
+  /opt/nginx-pqc-perf-test/run-traffic-mix-benchmark.sh
+```
+
+`summary.md` has a PQC and a Classic row per target with the achieved
+request rate, request latency percentiles, achieved handshake rate, actual
+resume percentage, full-vs-resumed handshake latency, errors, a Dropped
+count (nonzero means the requested rate could not be met), and the
+target's CPU / Mem during the run. Achieved rates below the targets, or a
+nonzero Dropped count, mean the target (or client) saturated; raise the
+client instance size or lower the rates.
+
+### Cleanup
+
+```sh
+cd traffic-mix/terraform
 terraform destroy
 ```

@@ -1,0 +1,28 @@
+---
+# Traffic-mix provisioning. Two plays against the Terraform-generated
+# inventory:
+#   1. nginx_targets - each Rocky Linux 9 host runs nginx-pqc + nginx-classic
+#      (resumption enabled, serving a random-sized payload). It also
+#      installs a bounded CPU/mem poller the client invokes over SSH.
+#   2. bench_client  - the single amd64 Amazon Linux 2023 host that builds
+#      the trafficmix tool and drives + consolidates every run over the
+#      network.
+# Shared building blocks (trafficmix/, certs/gen-certs.sh, html/small.html)
+# are copied from the repo root, mirroring the single-host playbook rather
+# than duplicating them. See aws/README.md.
+#
+# This is deliberately separate from the handshake-only fleet mode
+# (aws/fleet/) and the single-host mode (aws/single/); no files are shared
+# between the AWS modes.
+
+- name: Provision nginx target hosts (Rocky Linux 9)
+  hosts: nginx_targets
+  become: true
+  roles:
+    - nginx_target
+
+- name: Provision the traffic-mix client (Amazon Linux 2023, amd64)
+  hosts: bench_client
+  become: true
+  roles:
+    - bench_client
